@@ -40,6 +40,14 @@ var (
 		"dns":  ProbeDNS,
 		"grpc": ProbeGRPC,
 	}
+
+	ModuleUpdates = map[string]ModuleUpdateFn{
+		"http": ModuleHTTP,
+		"tcp":  ModuleNoopHandle,
+		"icmp": ModuleNoopHandle,
+		"dns":  ModuleNoopHandle,
+		"grpc": ModuleNoopHandle,
+	}
 )
 
 func Handler(w http.ResponseWriter, r *http.Request, c *config.Config, logger log.Logger, rh *ResultHistory, timeoutOffset float64, params url.Values,
@@ -109,7 +117,16 @@ func Handler(w http.ResponseWriter, r *http.Request, c *config.Config, logger lo
 		}
 	}
 
+	moduleUpdate, ok := ModuleUpdates[module.Prober]
+	if !ok {
+		http.Error(w, fmt.Sprintf("Unknown prober %q", module.Prober), http.StatusBadRequest)
+		return
+	}
+
 	sl := newScrapeLogger(logger, moduleName, target, logLevelProber)
+
+	module = moduleUpdate(r.Context(), r.URL.Query(), module, sl)
+
 	level.Info(sl).Log("msg", "Beginning probe", "probe", module.Prober, "timeout_seconds", timeoutSeconds)
 
 	start := time.Now()
